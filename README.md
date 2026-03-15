@@ -4,7 +4,7 @@ Ce projet implémente une bibliothèque dynamique (DLL) pour Windows, conçue po
 
 ## Caractéristiques
 
-- **Surveillance en temps réel** : Utilise l'API `AddClipboardFormatListener` pour une détection efficace des mises à jour du presse-papiers.
+- **Surveillance par Scrutation (Polling)** : Utilise `GetClipboardSequenceNumber` pour détecter les changements sans fenêtre invisible, avec un intervalle de 500ms.
 - **Log Automatique** : Concatène le texte capturé dans `clipboard_log.txt` sur le bureau avec un horodatage précis.
 - **Compatibilité Injection** : Conçue pour être injectée via mappage manuel (compatible avec `dll-injector`).
 - **Légèreté** : Implémentation en C pur avec des dépendances minimales.
@@ -27,7 +27,7 @@ Cela générera le fichier `clipboard-logger.dll`.
 
 ## Utilisation avec dll-injector
 
-Cette DLL peut être injectée dans n'importe quel processus Windows (ex: `notepad.exe`) en utilisant l'outil `dll-injector`. Une fois injectée, elle crée un thread de surveillance invisible qui fonctionne en arrière-plan.
+Cette DLL peut être injectée dans n'importe quel processus Windows (ex: `notepad.exe`) en utilisant l'outil `dll-injector`. Une fois injectée, elle lance un thread de scrutation en arrière-plan qui vérifie périodiquement le numéro de séquence du presse-papiers. Cette méthode est plus discrète car elle ne nécessite aucune fenêtre de message.
 
 ## Compatibilité
 

