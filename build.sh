@@ -2,8 +2,8 @@
 # Utilise x86_64-w64-mingw32-gcc pour générer une DLL 64-bit compatible Windows.
 
 # Nom du fichier de sortie
-OUTPUT_DLL="build/clipboard-logger.dll"
-SOURCE_FILE="src/clipboard-logger.c"
+OUTPUT_DLL="build/clipboard-logger-polling.dll"
+SOURCE_FILE="src/clipboard-logger-polling.c"
 
 if [ -d build ]; then
     rm -Rf build
