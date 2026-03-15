@@ -1,11 +1,14 @@
-#!/bin/bash
-
 # Script de build pour clipboard-logger
 # Utilise x86_64-w64-mingw32-gcc pour générer une DLL 64-bit compatible Windows.
 
 # Nom du fichier de sortie
-OUTPUT_DLL="clipboard-logger.dll"
-SOURCE_FILE="clipboard-logger.c"
+OUTPUT_DLL="build/clipboard-logger.dll"
+SOURCE_FILE="src/clipboard-logger.c"
+
+if [ -d build ]; then
+    rm -Rf build
+fi
+mkdir build
 
 # Options de compilation :
 # -shared : Générer une DLL
