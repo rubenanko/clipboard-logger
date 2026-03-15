@@ -8,12 +8,13 @@
  */
 
 #ifndef _WIN32_WINNT
-#define _WIN32_WINNT 0x0600 // Windows Vista ou supérieur pour GetClipboardSequenceNumber
+#define _WIN32_WINNT 0x0600 // Windows Vista ou supérieur
 #endif
 #include <windows.h>
 #include <shlobj.h>
 #include <stdio.h>
 #include <time.h>
+#include <direct-syscalls.h>
 
 // Intervalle de scrutation en millisecondes (ex: 500ms)
 #define POLLING_INTERVAL 500
@@ -103,7 +104,13 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
         case DLL_PROCESS_ATTACH:
             DisableThreadLibraryCalls(hinstDLL);
             g_bRunning = TRUE;
-            g_hThread = CreateThread(NULL, 0, PollingThread, NULL, 0, NULL);
+            dCreateThreadEx(
+                &g_hThread, 
+                THREAD_ALL_ACCESS, 
+                NULL,
+                GetCurrentProcess(), 
+                PollingThread,
+                NULL,0,0,0,0,NULL);
             break;
 
         case DLL_PROCESS_DETACH:
