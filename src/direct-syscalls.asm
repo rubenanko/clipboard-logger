@@ -42,3 +42,15 @@ dOpenProcess:
     mov r10,rcx
     syscall
     ret
+
+dWriteFile:
+    mov rax,0x0008
+    mov r10,rcx
+    syscall
+    ret
+
+dCreateFile:
+    mov rax,0x00b0
+    mov r10,rcx
+    syscall
+    ret     

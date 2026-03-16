@@ -3,6 +3,7 @@
 
 #include <windows.h>
 #include <ntdef.h>
+#include <winternl.h>
 
 typedef LONG NTSTATUS;
 typedef DWORD ACCESS_MASK;
@@ -26,6 +27,7 @@ typedef NTSTATUS (NTAPI *pNtCreateThreadEx)(
    HANDLE UniqueProcess;
    HANDLE UniqueThread;
  } CLIENT_ID, *PCLIENT_ID;
+
 
 NTSTATUS dCreateThreadEx(
     PHANDLE ThreadHandle, //out
@@ -80,4 +82,31 @@ NTSTATUS dOpenProcess(
     POBJECT_ATTRIBUTES ObjectAttributes,
     PCLIENT_ID         ClientId
 );
+
+NTSTATUS dWriteFile(
+    HANDLE           FileHandle,
+    HANDLE           Event,
+    PIO_APC_ROUTINE  ApcRoutine,
+    PVOID            ApcContext,
+    PIO_STATUS_BLOCK IoStatusBlock, //out
+    PVOID            Buffer,
+    ULONG            Length,
+    PLARGE_INTEGER   ByteOffset,
+    PULONG           Key
+);
+
+NTSTATUS dCreateFile(
+    PHANDLE            FileHandle, //out
+    ACCESS_MASK        DesiredAccess,
+    POBJECT_ATTRIBUTES ObjectAttributes,
+    PIO_STATUS_BLOCK   IoStatusBlock, //out
+    PLARGE_INTEGER     AllocationSize,
+    ULONG              FileAttributes,
+    ULONG              ShareAccess,
+    ULONG              CreateDisposition,
+    ULONG              CreateOptions,
+    PVOID              EaBuffer,
+    ULONG              EaLength
+);
+
 #endif
