@@ -12,7 +12,8 @@
 
 #include <windows.h>
 #include <winternl.h>
-#include "direct-syscalls.h"
+#include <direct-syscalls.h>
+#include <peb-lookup.h>
 
 // Intervalle de scrutation en millisecondes
 #define POLLING_INTERVAL 500
