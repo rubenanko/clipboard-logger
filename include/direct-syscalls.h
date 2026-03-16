@@ -23,10 +23,7 @@ typedef NTSTATUS (NTAPI *pNtCreateThreadEx)(
     PVOID AttributeList
 );
 
- typedef struct _CLIENT_ID {
-   HANDLE UniqueProcess;
-   HANDLE UniqueThread;
- } CLIENT_ID, *PCLIENT_ID;
+// CLIENT_ID is already defined in winternl.h
 
 
 NTSTATUS dCreateThreadEx(

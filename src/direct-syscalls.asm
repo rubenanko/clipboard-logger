@@ -4,6 +4,8 @@ global dProtectVirtualMemory
 global dReadVirtualMemory
 global dWriteVirtualMemory
 global dOpenProcess
+global dWriteFile
+global dCreateFile
 
 section .text
 
