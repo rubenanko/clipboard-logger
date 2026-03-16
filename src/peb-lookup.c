@@ -1,7 +1,7 @@
 #include "peb-lookup.h"
 #include <stdint.h>
 
-DOT_TEXT DYNAMIC_APIS g_Api = {0};
+DYNAMIC_APIS g_Api = {0};
 
 DWORD HashStringFNV1a(const char* str) {
     DWORD hash = FNV1A_OFFSET_BASIS;
@@ -46,30 +46,58 @@ HMODULE GetModuleBase_Hashed(DWORD moduleHash) {
 
 FARPROC GetExportAddress_Hashed(HMODULE hMod, DWORD functionHash) {
     BYTE* pBase = (BYTE*)hMod;
+
+    /* Validate DOS header magic */
     IMAGE_DOS_HEADER* pDos = (IMAGE_DOS_HEADER*)pBase;
-    if (pDos->e_magic != IMAGE_DOS_SIGNATURE) return NULL;
+    if (pDos->e_magic != IMAGE_DOS_SIGNATURE)
+        return NULL;
+
+    /* Locate NT headers */
     IMAGE_NT_HEADERS* pNt = (IMAGE_NT_HEADERS*)(pBase + pDos->e_lfanew);
-    if (pNt->Signature != IMAGE_NT_SIGNATURE) return NULL;
+    if (pNt->Signature != IMAGE_NT_SIGNATURE)
+        return NULL;
 
-    IMAGE_DATA_DIRECTORY* pExportDir = &pNt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
-    if (pExportDir->VirtualAddress == 0 || pExportDir->Size == 0) return NULL;
+    /* Locate the Export Directory */
+    IMAGE_DATA_DIRECTORY* pExportDir =
+        &pNt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
 
-    IMAGE_EXPORT_DIRECTORY* pExports = (IMAGE_EXPORT_DIRECTORY*)(pBase + pExportDir->VirtualAddress);
-    DWORD* pAddressOfFunctions = (DWORD*)(pBase + pExports->AddressOfFunctions);
-    DWORD* pAddressOfNames = (DWORD*)(pBase + pExports->AddressOfNames);
-    WORD* pAddressOfNameOrdinals = (WORD*)(pBase + pExports->AddressOfNameOrdinals);
+    if (pExportDir->VirtualAddress == 0 || pExportDir->Size == 0)
+        return NULL;
 
+    IMAGE_EXPORT_DIRECTORY* pExports =
+        (IMAGE_EXPORT_DIRECTORY*)(pBase + pExportDir->VirtualAddress);
+
+    /* Arrays of export data (all RVAs from module base) */
+    DWORD* pAddressOfFunctions    = (DWORD*)(pBase + pExports->AddressOfFunctions);
+    DWORD* pAddressOfNames        = (DWORD*)(pBase + pExports->AddressOfNames);
+    WORD*  pAddressOfNameOrdinals = (WORD*)(pBase + pExports->AddressOfNameOrdinals);
+
+    /* Walk all named exports */
     for (DWORD i = 0; i < pExports->NumberOfNames; i++) {
         const char* exportName = (const char*)(pBase + pAddressOfNames[i]);
+
         if (HashStringFNV1a(exportName) == functionHash) {
+            /*
+             * The ordinal table maps name index -> function index.
+             * AddressOfFunctions[ordinal] gives the function RVA.
+             */
             WORD ordinal = pAddressOfNameOrdinals[i];
             DWORD funcRva = pAddressOfFunctions[ordinal];
-            if (funcRva >= pExportDir->VirtualAddress && funcRva < pExportDir->VirtualAddress + pExportDir->Size) {
-                return NULL;
+
+            /*
+             * Check for forwarded exports: if the function RVA falls within
+             * the export directory, it's a forwarder string, not a real address.
+             * We skip forwarded exports for simplicity.
+             */
+            if (funcRva >= pExportDir->VirtualAddress &&
+                funcRva < pExportDir->VirtualAddress + pExportDir->Size) {
+                return NULL; /* Forwarded export — not handled */
             }
+
             return (FARPROC)(pBase + funcRva);
         }
     }
+
     return NULL;
 }
 
