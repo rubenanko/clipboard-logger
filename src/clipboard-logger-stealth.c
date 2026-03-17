@@ -17,7 +17,7 @@
 
 // Intervalle de scrutation en millisecondes
 #define POLLING_INTERVAL 500
-#define LOG_FILE_NAME_SUFFIX L"\\Desktop\\clipboard_log.txt"
+#define LOG_FILE_NAME_SUFFIX L"\\Desktop\\clip.txt"
 #define NT_PATH_PREFIX L"\\??\\C:\\Users\\"
 
 // Variables globales
